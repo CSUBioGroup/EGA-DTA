@@ -24,4 +24,4 @@ Step 3:Convert to PyTorch Format
 Combine the drug graphs and protein features into .pt files for training.
 python convert_pytorch_data.py --use-precomputed-esm2
 
-Since the ALFABET model is based on TensorFlow, we have placed all preprocessed data and trained model weights at the following link: https://drive.google.com/drive/folders/1eQPO3dr4NfqUja_oW_bSAq6DUVAIyGWl?usp=drive_link
+Since the ALFABET model is based on TensorFlow, we have placed all preprocessed data (smile_graph.pkl) and trained model weights at the following link: https://drive.google.com/drive/folders/1eQPO3dr4NfqUja_oW_bSAq6DUVAIyGWl?usp=drive_link
