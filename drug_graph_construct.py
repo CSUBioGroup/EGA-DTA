@@ -87,7 +87,7 @@ def smile_to_graph(smile):
         raise ValueError(f"Invalid SMILES string: {smile}")
     mol = Chem.AddHs(mol)
 
-    # 预测键能
+
     try:
         alfabet_predictions = cached_predict(smile)
         if not all(col in alfabet_predictions.columns for col in ['molecule', 'bond_index']):
@@ -99,7 +99,7 @@ def smile_to_graph(smile):
         print(f"Error in alfabet prediction for SMILES {smile}: {e}")
         bde_prediction_map = {}
 
-    # 生成 3D 构象
+
     conf = None
     try:
         if AllChem.EmbedMolecule(mol) != -1:
@@ -116,29 +116,25 @@ def smile_to_graph(smile):
         edges_BDE.append(_get_bond_energy(bond, bde_prediction_map, DEFAULT_BOND_ENERGIES))
         edges_BL.append(_get_bond_length(conf, bond))
 
-    # 生成双向边
+
     edge_index, bond_energies, bond_lengths = [], [], []
     for (i, j), energy, length in zip(edges, edges_BDE, edges_BL):
         edge_index.extend([[i, j], [j, i]])
         bond_energies.extend([energy, energy])
         bond_lengths.extend([length, length])
 
-    # ========== 新增处理：处理孤立原子/无边的情况 ==========
     if len(edge_index) == 0:
-        # 如果没有边（例如 Li+ 离子），添加一个自环 [i, i]
         for i in range(num_atoms):
             edge_index.append([i, i])
             bond_energies.append(0.0)
-            # 键长设为 1.5 (典型碳碳键长)，防止标准化时数值爆炸
             bond_lengths.append(1.5)
-
     return num_atoms, edge_index, bond_energies, bond_lengths
 
 compound_iso_smiles = []
-# [修改] 更新了数据集列表
+
 target_datasets = ['Metz', 'kiba', 'davis', 'bindingdb']
 
-print(f"正在读取数据集 SMILES: {target_datasets}")
+print(f" Loading SMILES: {target_datasets}")
 for dt_name in target_datasets:
     opts = ['train', 'test']
     for opt in opts:
@@ -161,7 +157,7 @@ for i, smile in enumerate(compound_iso_smiles):
     if (i+1) % 100 == 0:
         print(f"Processing SMILES {i+1}/{len(compound_iso_smiles)}")
     try:
-        g = smile_to_graph(smile)   #转换为图
+        g = smile_to_graph(smile)   
         smile_graph[smile] = g
     except Exception as e:
         print(f"Failed to process SMILES: {smile}, Error: {e}")
