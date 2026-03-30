@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import TransformerConv, Set2Set, LayerNorm
 
-# ==================== 基础组件 ====================
 
 class SwiGLU(nn.Module):
     def __init__(self, dim_in, dim_out, dropout=0.1):
@@ -48,7 +47,6 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x):
         B, C = x.shape
-        # 兼容性处理：增加序列维度
         x = x.unsqueeze(1) # [B, 1, C]
         B, N, _ = x.shape
         
@@ -72,11 +70,11 @@ class LearnableFusion(nn.Module):
         return sum(w * f for w, f in zip(weights, features))
 
 
-# ==================== 蛋白质编码器 (适配 3B 特征) ====================
+# ==================== protein encoder====================
 class AdvancedProteinEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.1):
         super().__init__()
-        # SwiGLU 作为瓶颈层：2560 -> 1024
+        # SwiGLU 
         self.input_proj = SwiGLU(input_dim, hidden_dim, dropout)
 
         self.res_blocks = nn.Sequential(
@@ -99,7 +97,7 @@ class AdvancedProteinEncoder(nn.Module):
         return x
 
 
-# ==================== 经典架构回归版 ====================
+# ==================== GT ====================
 class EnhancedGATNet(nn.Module):
     def __init__(self, n_output=1, num_features_xd=72, num_features_xt=25,
                  output_dim=512, dropout=0.1,
@@ -115,7 +113,7 @@ class EnhancedGATNet(nn.Module):
         self.fusion_strategy = fusion_strategy
         self.output_dim = output_dim
 
-        # ---------- 1. GNN 分支 ----------
+        # ---------- 1. GNN  ----------
         self.conv1 = TransformerConv(num_features_xd, gnn_hidden_dim, heads=gnn_heads,
                                      concat=True, dropout=dropout, edge_dim=2, beta=True)
         self.ln1 = LayerNorm(gnn_hidden_dim * gnn_heads)
@@ -132,7 +130,7 @@ class EnhancedGATNet(nn.Module):
             nn.Linear(output_dim * 2, output_dim)
         )
 
-        # ---------- 2. ECFP 分支 ----------
+        # ---------- 2. ECFP  ----------
         self.ecfp_proj_dim = 1024
         self.ecfp_reduction = nn.Sequential(
             nn.Linear(ecfp_dim, self.ecfp_proj_dim),
@@ -145,7 +143,7 @@ class EnhancedGATNet(nn.Module):
             nn.GELU()
         )
 
-        # ---------- 3. 蛋白质分支 ----------
+        # ---------- 3. Protein ----------
         self.protein_encoder = AdvancedProteinEncoder(
             input_dim=esm_dim, 
             hidden_dim=1024, 
@@ -153,17 +151,16 @@ class EnhancedGATNet(nn.Module):
             dropout=dropout
         )
 
-        # ---------- 4. 融合组件 ----------
+        # ---------- 4. Fusion ----------
         self.drug_gate = nn.Sequential(
             nn.Linear(output_dim, output_dim),
             nn.Sigmoid()
         )
 
         self.learnable_fusion = LearnableFusion(3)
-        # 注意：这里保留初始化是为了防止加载权重报错，但实际上我们用 mean 替代了它
         self.fusion_attention = MultiHeadAttention(output_dim, num_heads=8)
 
-        # 最终分类器
+ 
         if fusion_strategy == 'full':
             # Concat(3) + Fused(1) + Attn(1) = 5
             fusion_dim_total = output_dim * 5
@@ -219,18 +216,9 @@ class EnhancedGATNet(nn.Module):
         # === 5. Fusion ===
         # Weighted Sum
         x_fused = self.learnable_fusion([x_gnn_gated, x_ecfp_gated, x_protein])
-
-        # Attention 替代方案 (稳健版)
-        # 直接计算 Stacked 特征的平均值，作为一种简单的"全局交互"
-        # 这避免了复杂的 Attention 计算导致的数值不稳定和报错
         stacked = torch.stack([x_gnn, x_ecfp, x_protein], dim=1)
-        
-        # [FIXED] 这里删除了之前报错的 attn_out = ... 行
         x_attn = stacked.mean(dim=1) 
-        
         x_concat = torch.cat([x_gnn_gated, x_ecfp_gated, x_protein], dim=1)
-
-        # 拼接所有特征
         xc = torch.cat([x_concat, x_fused, x_attn], dim=1)
 
         out = self.classifier(xc)
